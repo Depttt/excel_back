@@ -8,6 +8,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -23,7 +24,7 @@ public class DynamicCheckingServiceTest {
                 {"สมชาย ใจดี", "example@test.com", "1234567890123", "0812345678", "123 Main St"}
         });
 
-        List<String> errors = dynamicCheckingService.validateExcel(validFile);
+        List<Map<String, Object>> errors = dynamicCheckingService.validateExcel(validFile);
         assertEquals(0, errors.size(), "ควรไม่มีข้อผิดพลาด");
     }
 
@@ -34,7 +35,7 @@ public class DynamicCheckingServiceTest {
                 {"สมชาย123", "invalid-email", "123", "12345", "<invalid>"}
         });
 
-        List<String> errors = dynamicCheckingService.validateExcel(invalidFile);
+        List<Map<String, Object>> errors = dynamicCheckingService.validateExcel(invalidFile);
         assertEquals(1, errors.size(), "ควรมีข้อผิดพลาดในแถวที่ 2");
         assertEquals("แถวที่ 2: ชื่อไม่ควรมีตัวเลข, อีเมลไม่ถูกต้อง, บัตรประชาชนไม่ถูกต้อง, หมายเลขโทรศัพท์ไม่ถูกต้อง, ที่อยู่ไม่ถูกต้อง", errors.get(0));
     }

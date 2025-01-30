@@ -39,7 +39,7 @@ public class AddressValidator {
             return "รูปแบบที่อยู่ไม่ถูกต้อง";
         }
 
-        return null;
+        return "success";
     }
 
 }

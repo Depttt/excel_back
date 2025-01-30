@@ -7,7 +7,7 @@ public class IDValidator {
             return "บัตรประชาชนไม่ถูกต้อง";
         }
 
-        return null;
+        return "success";
     }
 
     private static boolean isValidCitizenId(String citizenId) {

@@ -1,20 +1,20 @@
 package digio.excel.services;
 
+import digio.excel.DTO.Calculate;
 import digio.excel.validator.*;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
+@Slf4j
 @Service
 public class DynamicCheckingService {
 
@@ -24,71 +24,78 @@ public class DynamicCheckingService {
         initializeDefaultValidationRules();
     }
 
-    private void initializeDefaultValidationRules() {
-        Arrays.stream(ValidationType.values()).forEach(type ->
-                validationRules.put(type.getPattern(), type.getValidator())
-        );
-    }
-
-    private enum ValidationType {
-        NAME("^(ชื่อ|name|ชื่อนามสกุล|fullname).*", NameValidator::validate),
-        EMAIL("^(อีเมล|email).*", EmailValidator::validate),
-        CITIZEN_ID("^(บัตรประชาชน|citizenid).*", IDValidator::validate),
-        PHONE("^(เบอร์โทร|phone).*", TelValidator::validate),
-        ADDRESS("^(ที่อยู่|address).*", AddressValidator::validate);
-
-        private final Pattern pattern;
-        private final Function<String, String> validator;
-
-        ValidationType(String regex, Function<String, String> validator) {
-            this.pattern = Pattern.compile(regex);
-            this.validator = validator;
-        }
-
-        public Pattern getPattern() {
-            return pattern;
-        }
-
-        public Function<String, String> getValidator() {
-            return validator;
-        }
-    }
-
-    public List<String> validateExcel(MultipartFile file) {
-        return validate(file, null, "ไม่สามารถอ่านไฟล์ Excel ได้");
-    }
-
-    public List<String> validateExcelWithSelectedHeaders(MultipartFile file, List<String> selectedHeaders) {
-        if (selectedHeaders == null || selectedHeaders.isEmpty()) {
-            throw new IllegalArgumentException("โปรดระบุหัวข้อที่ต้องการตรวจสอบ");
-        }
-        return validate(file, selectedHeaders, "ไม่สามารถอ่านไฟล์ Excel ได้");
-    }
-
-    private List<String> validate(MultipartFile file, List<String> selectedHeaders, String errorMessage) {
+    public List<Map<String, Object>> handleUploadWithTemplate(MultipartFile file, List<String> expectedHeaders, List<Calculate> calculate) {
         if (file.isEmpty()) {
-            throw new IllegalArgumentException("ไม่สามารถอ่านไฟล์ Excel ได้");
+            throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
         }
-        Map<Integer, StringBuilder> errorMap = new TreeMap<>();
-        Instant startTime = Instant.now();
+
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+
+            if (isRowsEmpty(sheet)) {
+                throw new IllegalArgumentException("ไฟล์นี้ไม่มีข้อมูล");
+            }
+
+            System.out.println(calculate);
+
+            List<String> flatHeaders = expectedHeaders.stream()
+                    .map(header -> header.replace("[", "").replace("]", "").replace("\"", "")) // Remove [ ] and "
+                    .collect(Collectors.toList());
+
+            System.out.println(flatHeaders);
+
+            return processRows(sheet, flatHeaders, null);
+
+        } catch (IOException e) {
+            throw new IllegalArgumentException("ไม่สามารถอ่านไฟล์ Excel ได้", e);
+        }
+    }
+
+    public List<Map<String, Object>> validateExcelWithSelectedHeaders(MultipartFile file, List<String> selectedHeaders) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
+        }
 
         try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
             List<String> headers = extractHeaders(sheet);
 
-            if (selectedHeaders != null && getSelectedHeaderIndices(headers, selectedHeaders).isEmpty()) {
+            if (isRowsEmpty(sheet)) {
+                throw new IllegalArgumentException("ไฟล์นี้ไม่มีข้อมูล");
+            }
+
+            validateUnknown(selectedHeaders, headers);
+
+            List<Integer> selectedIndices = getHeaderIndices(headers, selectedHeaders);
+            if (selectedIndices.isEmpty()) {
                 throw new IllegalArgumentException("ไม่พบหัวข้อที่เลือกในไฟล์ Excel");
             }
 
-            processRows(sheet, headers, selectedHeaders == null ? null : getSelectedHeaderIndices(headers, selectedHeaders), errorMap);
+            return processRows(sheet, headers, selectedIndices);
         } catch (IOException e) {
-            throw new IllegalArgumentException(errorMessage, e);
+            throw new IllegalArgumentException("ไม่สามารถอ่านไฟล์ Excel ได้", e);
+        }
+    }
+
+    public List<Map<String, Object>> validateExcel(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
         }
 
-        Instant endTime = Instant.now();
-        System.out.println("เวลาในการประมวลผล: " + formatDuration(Duration.between(startTime, endTime).toMillis()));
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = workbook.getSheetAt(0);
+            List<String> headers = extractHeaders(sheet);
 
-        return formatErrorMap(errorMap);
+            if (isRowsEmpty(sheet)) {
+                throw new IllegalArgumentException("ไฟล์นี้ไม่มีข้อมูล");
+            }
+
+            validateUnknownHeaders(headers);
+
+            return processRows(sheet, headers, null);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("ไม่สามารถอ่านไฟล์ Excel ได้", e);
+        }
     }
 
     private List<String> extractHeaders(Sheet sheet) {
@@ -97,65 +104,122 @@ public class DynamicCheckingService {
             throw new IllegalArgumentException("ไม่มีแถวหัวข้อในไฟล์ Excel");
         }
 
-        return StreamSupport.stream(headerRow.spliterator(), false)
-                .map(cell -> cell.getStringCellValue().trim().toLowerCase())
-                .collect(Collectors.toList());
+        return StreamSupport.stream(
+                        Spliterators.spliteratorUnknownSize(headerRow.cellIterator(), Spliterator.ORDERED), false
+                )
+                .map(this::getCellValue)
+                .filter(Objects::nonNull)
+                .map(String::toLowerCase)
+                .toList();
     }
 
-    private List<Integer> getSelectedHeaderIndices(List<String> headers, List<String> selectedHeaders) {
-        return selectedHeaders.stream()
-                .map(headers::indexOf)
+    private List<Integer> getHeaderIndices(List<String> headers, List<String> selectedHeaders) {
+        List<String> lowerHeaders = headers.stream().map(String::toLowerCase).toList();
+        List<String> lowerSelected = selectedHeaders.stream().map(String::toLowerCase).toList();
+
+        return lowerSelected.stream()
+                .map(lowerHeaders::indexOf)
                 .filter(index -> index >= 0)
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    private void processRows(Sheet sheet, List<String> headers, List<Integer> selectedHeaderIndices, Map<Integer, StringBuilder> errorMap) {
+    private List<Map<String, Object>> processRows(Sheet sheet, List<String> headers, List<Integer> selectedIndices) {
+        List<Map<String, Object>> errorList = new ArrayList<>();
+        Map<Integer, String> errorMap = new TreeMap<>();
+
         for (Row row : sheet) {
-            if (row.getRowNum() == 0 || isRowEmpty(row)) continue;
+            if (row.getRowNum() == 0) continue;
 
             StringBuilder errorBuilder = new StringBuilder();
-            List<Integer> indices = selectedHeaderIndices != null ? selectedHeaderIndices :
-                    IntStream.range(0, headers.size()).boxed().collect(Collectors.toList());
+            for (int i = 0; i < headers.size(); i++) {
+                if (selectedIndices != null && !selectedIndices.contains(i)) continue;
 
-            indices.forEach(index -> {
-                String header = headers.get(index);
-                String cellValue = getCellValue(row.getCell(index));
-                applyValidationRules(header, cellValue, errorBuilder);
-            });
+                String header = headers.get(i);
+                String cellValue = getCellValue(row.getCell(i));
+
+                String errorMessage = validateCellAndGetMessage(header, cellValue);
+                if (!errorMessage.equals("success")) {
+                    Map<String, Object> errorDetails = new HashMap<>();
+                    errorDetails.put("row", row.getRowNum() );
+                    errorDetails.put("column", i );
+                    errorDetails.put("header", header);
+                    errorDetails.put("message", errorMessage);
+
+                    errorList.add(errorDetails);
+                    errorBuilder.append(errorMessage).append("; ");
+                }
+            }
 
             if (!errorBuilder.isEmpty()) {
-                errorMap.put(row.getRowNum() + 1, errorBuilder);
+                errorMap.put(row.getRowNum() + 1, errorBuilder.toString().trim());
             }
         }
-    }
 
-    private boolean isRowEmpty(Row row) {
-        for (Cell cell : row) {
-            if (cell != null && cell.getCellType() != CellType.BLANK) {
-                return false;
-            }
+        if (!errorMap.isEmpty()) {
+            errorList.add(Map.of(
+                    "summary", "Errors found",
+                    "errorDetails", formatErrorMessages(errorMap)
+            ));
         }
-        return true;
+
+        return errorList;
     }
 
-    private void applyValidationRules(String header, String cellValue, StringBuilder errorBuilder) {
-        boolean matched = validationRules.entrySet().stream()
-                .anyMatch(entry -> {
-                    if (entry.getKey().matcher(header).matches()) {
-                        String error = entry.getValue().apply(cellValue);
-                        if (error != null) {
-                            appendError(errorBuilder, error);
-                        }
-                        return true;
-                    }
-                    return false;
-                });
+    private String validateCellAndGetMessage(String header, String cellValue) {
+        return validationRules.entrySet().stream()
+                .filter(entry -> entry.getKey().matcher(header).matches())
+                .findFirst()
+                .map(entry -> entry.getValue().apply(cellValue))
+                .orElse("ไม่สามารถตรวจสอบหัวข้อนี้ได้: " + header);
+    }
 
-        if (!matched) {
-            appendError(errorBuilder, "พบหัวข้อที่ไม่รู้จัก: " + header);
+    private void validateRowWithIndices(Row row, List<String> headers, List<Integer> selectedIndices, StringBuilder errorBuilder) {
+        for (int index : selectedIndices) {
+            validateCell(headers.get(index), getCellValue(row.getCell(index)), errorBuilder);
         }
     }
 
+    private void validateRow(Row row, List<String> headers, StringBuilder errorBuilder) {
+        for (int i = 0; i < headers.size(); i++) {
+            String header = headers.get(i);
+            String cellValue = getCellValue(row.getCell(i));
+            validateCell(header, cellValue, errorBuilder);
+        }
+    }
+
+
+    private void validateCell(String header, String cellValue, StringBuilder errorBuilder) {
+        validationRules.entrySet().stream()
+                .filter(entry -> entry.getKey().matcher(header).matches())
+                .findFirst()
+                .ifPresentOrElse(
+                        entry -> appendError(errorBuilder, entry.getValue().apply(cellValue)),
+                        () -> appendError(errorBuilder, "พบหัวข้อที่ไม่รู้จัก: " + header)
+                );
+    }
+
+    private void validateUnknown(List<String> selectedHeaders, List<String> headers) {
+        List<String> lowerHeaders = headers.stream().map(String::toLowerCase).toList();
+        List<String> lowerSelectedHeaders = selectedHeaders.stream().map(String::toLowerCase).toList();
+
+        List<String> unknownHeaders = lowerSelectedHeaders.stream()
+                .filter(header -> validationRules.keySet().stream().noneMatch(pattern -> pattern.matcher(header).matches()))
+                .toList();
+
+        if (!unknownHeaders.isEmpty()) {
+            throw new IllegalArgumentException("พบหัวข้อที่ไม่สามารถตรวจสอบได้: " + String.join(", ", unknownHeaders));
+        }
+    }
+
+    private void validateUnknownHeaders(List<String> headers) {
+        List<String> unknownHeaders = headers.stream()
+                .filter(header -> validationRules.keySet().stream().noneMatch(pattern -> pattern.matcher(header).matches()))
+                .toList();
+
+        if (!unknownHeaders.isEmpty()) {
+            throw new IllegalArgumentException("พบหัวข้อที่ไม่รู้จัก: " + String.join(", ", unknownHeaders));
+        }
+    }
 
     private String getCellValue(Cell cell) {
         if (cell == null) return null;
@@ -168,31 +232,49 @@ public class DynamicCheckingService {
         };
     }
 
-    private void appendError(StringBuilder errorBuilder, String errorMessage) {
-        if (!errorBuilder.isEmpty()) {
-            errorBuilder.append(", ");
+    private void appendError(StringBuilder errorBuilder, String error) {
+        if (error != null && !error.equals("success")) {
+            if (!errorBuilder.isEmpty()) {
+                errorBuilder.append(", ");
+            }
+            errorBuilder.append(error);
         }
-        errorBuilder.append(errorMessage);
     }
 
-    private List<String> formatErrorMap(Map<Integer, StringBuilder> errorMap) {
+    private List<String> formatErrorMessages(Map<Integer, String> errorMap) {
         return errorMap.entrySet().stream()
-                .map(entry -> "แถวที่ " + entry.getKey() + ": " + entry.getValue().toString())
-                .collect(Collectors.toList());
+                .map(entry -> "แถวที่ " + entry.getKey() + ": " + entry.getValue())
+                .toList();
     }
 
-    private String formatDuration(long durationMillis) {
-        long seconds = durationMillis / 1000;
-        long minutes = seconds / 60;
-        long hours = minutes / 60;
 
-        if (hours > 0) {
-            return hours + " ชั่วโมง " + (minutes % 60) + " นาที";
-        } else if (minutes > 0) {
-            return minutes + " นาที " + (seconds % 60) + " วินาที";
-        } else {
-            return seconds + " วินาที";
+    private boolean isRowsEmpty(Sheet sheet) {
+        for (int rowIndex = 1; rowIndex < sheet.getPhysicalNumberOfRows(); rowIndex++) {
+            Row row = sheet.getRow(rowIndex);
+            if (row != null) {
+                for (Cell cell : row) {
+                    if (cell != null && !getCellValue(cell).trim().isEmpty()) {
+                        return false;
+                    }
+                }
+            }
         }
+        return true;
     }
+
+    private void initializeDefaultValidationRules() {
+        validationRules.put(Pattern.compile("^(ชื่อ|name|ชื่อนามสกุล|fullname).*"), NameValidator::validate);
+        validationRules.put(Pattern.compile("^(อีเมล|email).*$"), EmailValidator::validate);
+        validationRules.put(Pattern.compile("^(บัตรประชาชน|citizenid).*$"), IDValidator::validate);
+        validationRules.put(Pattern.compile("^(เบอร์โทร|phone).*$"), TelValidator::validate);
+        validationRules.put(Pattern.compile("^(ที่อยู่|address).*$"), AddressValidator::validate);
+        validationRules.put(Pattern.compile("^(อายุ|age).*$"), AgeValidator::validateDateOfBirth);
+        validationRules.put(Pattern.compile("^(เพศ|gender).*$"), GenderValidator::validateGender);
+        validationRules.put(
+                Pattern.compile("^(จำนวนเงิน|balance|amount|transactionAmount|deposit|withdrawal|credit|debit|transferAmount|loanAmount|paymentAmount|fundAmount|accountBalance|currentBalance).*$"),
+                BalanceValidator::validate
+        );
+    }
+
 }
 

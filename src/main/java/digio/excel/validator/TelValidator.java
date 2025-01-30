@@ -6,6 +6,6 @@ public class TelValidator {
         if (tel == null || !tel.matches("^0[1-9][0-9]{8}$")) {
             return "หมายเลขโทรศัพท์ไม่ถูกต้อง";
         }
-        return null;
+        return "success";
     }
 }

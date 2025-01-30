@@ -14,6 +14,6 @@ public class GenderValidator {
             return "เพศไม่ถูกต้อง";
         }
 
-        return null;
+        return "success";
     }
 }

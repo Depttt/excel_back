@@ -66,6 +66,6 @@ public class NameValidator {
             return "นามสกุลควรมีความยาวอย่างน้อย 2 ตัวอักษร";
         }
 
-        return null;
+        return "success";
     }
 }

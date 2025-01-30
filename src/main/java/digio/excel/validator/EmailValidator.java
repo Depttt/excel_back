@@ -10,6 +10,6 @@ public class EmailValidator {
             return  "อีเมลไม่ถูกต้อง";
         }
 
-        return null;
+        return "success";
     }
 }
