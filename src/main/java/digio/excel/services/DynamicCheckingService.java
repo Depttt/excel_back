@@ -29,6 +29,8 @@ public class DynamicCheckingService {
             throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
         }
 
+        List<Map<String, Object>> errorList = new ArrayList<>(); // add
+
         try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
 

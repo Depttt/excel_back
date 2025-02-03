@@ -1,10 +1,8 @@
 package digio.excel.controller;
 
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import digio.excel.DTO.Calculate;
 import digio.excel.services.DynamicCheckingService;
-import digio.excel.services.StaticCheckingService;
+import digio.excel.services.TemplateService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +21,9 @@ public class ExcelCheckingController {
 
     @Autowired
     private DynamicCheckingService dynamicCheckingService;
+
+    @Autowired
+    private TemplateService templateService;
 
     @PostMapping("/dynamic")
     public ResponseEntity<?> validateExcelFile(@RequestParam("file") MultipartFile file) {
@@ -62,26 +63,23 @@ public class ExcelCheckingController {
 
     @PostMapping("/template")
     public ResponseEntity<?> handleUploadWithTemplate(
-        @RequestParam("file") MultipartFile file,
-        @RequestParam("Condition") List<String> exceptedHeader,
-        @RequestParam("calculate") String calculateJson){
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("condition") List<String> expectedHeaders,
+            @RequestParam("calculator") List<String> calculator) {
         ResponseEntity<?> fileValidation = validateFile(file);
-        if ( fileValidation != null) return fileValidation;
+        if (fileValidation != null) return fileValidation;
 
-        if( exceptedHeader == null || exceptedHeader.isEmpty()){
-            return ResponseEntity.badRequest().body(Collections.singletonMap("message", "โปรดระบุหัวข้อที่ต้องการในเทมเพลท"));
+        if (expectedHeaders == null || expectedHeaders.isEmpty()) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("message", "โปรดระบุหัวข้อที่ต้องการตรวจสอบในเทมเพลต"));
         }
 
-        try{
-            ObjectMapper objectMapper= new ObjectMapper();
-            List<Calculate> calculater = objectMapper.readValue(calculateJson, objectMapper.getTypeFactory().constructCollectionType(List.class, Calculate.class));
-
-            List<Map<String, Object>> validationErrors = dynamicCheckingService.handleUploadWithTemplate(file, exceptedHeader, calculater);
+        try {
+            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator);
 
             return validationErrors.isEmpty() ?
-                    ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ excel ถูกต้อง ไม่มีึข้อผิดพลาด")):
+                    ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ Excel ถูกต้อง ไม่มีข้อผิดพลาด")) :
                     ResponseEntity.badRequest().body(Collections.singletonMap("errors", validationErrors));
-        } catch (Exception e){
+        } catch (Exception e) {
             return handleException(e);
         }
     }
