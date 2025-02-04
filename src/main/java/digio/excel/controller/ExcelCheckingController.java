@@ -65,7 +65,8 @@ public class ExcelCheckingController {
     public ResponseEntity<?> handleUploadWithTemplate(
             @RequestParam("file") MultipartFile file,
             @RequestParam("condition") List<String> expectedHeaders,
-            @RequestParam("calculator") List<String> calculator) {
+            @RequestParam("calculator") List<String> calculator,
+            @RequestParam("ruleset") List<String> ruleset) {
         ResponseEntity<?> fileValidation = validateFile(file);
         if (fileValidation != null) return fileValidation;
 

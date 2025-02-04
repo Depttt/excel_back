@@ -2,6 +2,7 @@ package digio.excel.services;
 
 import digio.excel.validator.*;
 import org.apache.poi.ss.usermodel.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -14,13 +15,16 @@ import java.util.stream.Collectors;
 @Service
 public class TemplateService {
 
+    @Autowired
+    ConditionService conditionService;
+
     private final Map<Pattern, Function<String, String>> validationRules = new HashMap<>();
 
     public TemplateService() {
         initializeDefaultValidationRules();
     }
 
-    public List<Map<String, Object>> handleUploadWithTemplate(MultipartFile file, List<String> expectedHeaders, List<String> calculator) {
+    public List<Map<String, Object>> handleUploadWithTemplate(MultipartFile file, List<String> expectedHeaders,List<Map<String, String>> conditions, List<String> calculator) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
         }
@@ -32,8 +36,12 @@ public class TemplateService {
                 throw new IllegalArgumentException("ไฟล์นี้ไม่มีข้อมูล");
             }
 
-            List<List<String>> parsedCalculations = new ArrayList<>();
+            List<Map<String, Object>> validationErrors = validateExcelConditions(sheet, conditions);
+            if (!validationErrors.isEmpty()) {
+                return validationErrors; // ✅ ถ้ามีข้อผิดพลาด ให้ return ทันที
+            }
 
+            List<List<String>> parsedCalculations = new ArrayList<>();
             if (calculator != null && !calculator.isEmpty()) {
                 List<String> currentCalculation = new ArrayList<>();
 
@@ -199,6 +207,15 @@ public class TemplateService {
             return resultList;
         }
     }
+
+    private List<Map<String, Object>> validateExcelConditions(Sheet sheet, List<Map<String, String>> conditions) {
+        if (conditions == null || conditions.isEmpty()) {
+            return new ArrayList<>(); // ✅ ถ้าไม่มีเงื่อนไข ก็ไม่ต้องตรวจสอบอะไร
+        }
+
+        return conditionService.validateCondition(sheet, conditions);
+    }
+
 
     private boolean isRowsEmpty(Sheet sheet) {
         for (int rowIndex = 1; rowIndex < sheet.getPhysicalNumberOfRows(); rowIndex++) {
