@@ -75,7 +75,7 @@ public class ExcelCheckingController {
         }
 
         try {
-            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator);
+            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator, ruleset);
 
             return validationErrors.isEmpty() ?
                     ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ Excel ถูกต้อง ไม่มีข้อผิดพลาด")) :

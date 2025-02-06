@@ -1,5 +1,6 @@
 package digio.excel.services;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import digio.excel.validator.*;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,10 @@ import java.util.stream.Collectors;
 public class TemplateService {
 
     @Autowired
-    ConditionService conditionService;
+    ConditionRelationServices conditionRelationServices;
+
+    @Autowired
+    ObjectMapper objectMapper;
 
     private final Map<Pattern, Function<String, String>> validationRules = new HashMap<>();
 
@@ -24,7 +28,7 @@ public class TemplateService {
         initializeDefaultValidationRules();
     }
 
-    public List<Map<String, Object>> handleUploadWithTemplate(MultipartFile file, List<String> expectedHeaders,List<Map<String, String>> conditions, List<String> calculator) {
+    public List<Map<String, Object>> handleUploadWithTemplate(MultipartFile file, List<String> expectedHeaders, List<String> calculator, List<String> ruleset) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้");
         }
@@ -36,9 +40,10 @@ public class TemplateService {
                 throw new IllegalArgumentException("ไฟล์นี้ไม่มีข้อมูล");
             }
 
-            List<Map<String, Object>> validationErrors = validateExcelConditions(sheet, conditions);
-            if (!validationErrors.isEmpty()) {
-                return validationErrors; // ✅ ถ้ามีข้อผิดพลาด ให้ return ทันที
+            List<Map<String, String>> parsedRules = parseRuleset(ruleset);
+            List<Map<String, Object>> columnErrors = conditionRelationServices.validateColumnRelations(sheet, parsedRules);
+            if (!columnErrors.isEmpty()) {
+                return columnErrors;
             }
 
             List<List<String>> parsedCalculations = new ArrayList<>();
@@ -94,6 +99,20 @@ public class TemplateService {
             throw new IllegalArgumentException("ไม่สามารถอ่านไฟล์ Excel ได้", e);
         }
     }
+
+    private List<Map<String, String>> parseRuleset(List<String> ruleset) {
+        List<Map<String, String>> parsedRules = new ArrayList<>();
+        try {
+            for (String ruleJson : ruleset) {
+                Map<String, String> ruleMap = objectMapper.readValue(ruleJson, Map.class);
+                parsedRules.add(ruleMap);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("แปลง ruleset ไม่ได้: " + e.getMessage());
+        }
+        return parsedRules;
+    }
+
 
     private List<Map<String, Object>> processRowsAndCalculations(Sheet sheet, List<String> headers, List<Integer> selectedIndices, List<String> calculation) {
         List<Map<String, Object>> resultList = new ArrayList<>();
@@ -210,10 +229,10 @@ public class TemplateService {
 
     private List<Map<String, Object>> validateExcelConditions(Sheet sheet, List<Map<String, String>> conditions) {
         if (conditions == null || conditions.isEmpty()) {
-            return new ArrayList<>(); // ✅ ถ้าไม่มีเงื่อนไข ก็ไม่ต้องตรวจสอบอะไร
+            return new ArrayList<>();
         }
 
-        return conditionService.validateCondition(sheet, conditions);
+        return conditionRelationServices.validateColumnRelations(sheet, conditions);
     }
 
 
