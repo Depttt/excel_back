@@ -66,7 +66,7 @@ public class ExcelCheckingController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("condition") List<String> expectedHeaders,
             @RequestParam("calculator") List<String> calculator,
-            @RequestParam("ruleset") List<String> ruleset) {
+            @RequestParam("relation") List<String> ruleset) {
         ResponseEntity<?> fileValidation = validateFile(file);
         if (fileValidation != null) return fileValidation;
 
@@ -75,7 +75,7 @@ public class ExcelCheckingController {
         }
 
         try {
-            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator);
+            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator, ruleset);
 
             return validationErrors.isEmpty() ?
                     ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ Excel ถูกต้อง ไม่มีข้อผิดพลาด")) :

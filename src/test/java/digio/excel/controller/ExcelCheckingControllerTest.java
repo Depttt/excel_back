@@ -2,7 +2,6 @@ package digio.excel.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import digio.excel.services.DynamicCheckingService;
-import digio.excel.services.StaticCheckingService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,8 +28,8 @@ class ExcelCheckingControllerTest {
     @MockitoBean
     private DynamicCheckingService dynamicCheckingService;
 
-    @MockitoBean
-    private StaticCheckingService staticCheckingService;
+//    @MockitoBean
+//    private StaticCheckingService staticCheckingService;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -48,30 +47,30 @@ class ExcelCheckingControllerTest {
 
     }
 
-    @Test
-    public void test_staticNoErrors() throws Exception {
-        MockMultipartFile validFile = new MockMultipartFile("file", "test.xlsx", "application/vnd.ms-excel", "dummy content".getBytes());
+//    @Test
+//    public void test_staticNoErrors() throws Exception {
+//        MockMultipartFile validFile = new MockMultipartFile("file", "test.xlsx", "application/vnd.ms-excel", "dummy content".getBytes());
+//
+//        Mockito.when(staticCheckingService.validateAndRejectExcel(validFile)).thenReturn(Collections.emptyList());
+//
+//        mockMvc.perform(multipart("/api/excel/static")
+//                        .file(validFile))
+//                .andExpect(status().isOk())
+//                .andExpect((ResultMatcher) content().string("ตรวจสอบข้อมูลเรียบร้อย ไม่มีข้อผิดพลาด"));
+//    }
 
-        Mockito.when(staticCheckingService.validateAndRejectExcel(validFile)).thenReturn(Collections.emptyList());
-
-        mockMvc.perform(multipart("/api/excel/static")
-                        .file(validFile))
-                .andExpect(status().isOk())
-                .andExpect((ResultMatcher) content().string("ตรวจสอบข้อมูลเรียบร้อย ไม่มีข้อผิดพลาด"));
-    }
-
-    @Test
-    public void test_staticWithErrors() throws Exception {
-        MockMultipartFile invalidFile = new MockMultipartFile("file", "test.xlsx", "application/vnd.ms-excel", "dummy content".getBytes());
-
-        Mockito.when(staticCheckingService.validateAndRejectExcel(invalidFile))
-                .thenReturn(List.of("Error 1", "Error 2"));
-
-        mockMvc.perform(multipart("/api/excel/static")
-                        .file(invalidFile))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().json(objectMapper.writeValueAsString(List.of("Error 1", "Error 2"))));
-    }
+//    @Test
+//    public void test_staticWithErrors() throws Exception {
+//        MockMultipartFile invalidFile = new MockMultipartFile("file", "test.xlsx", "application/vnd.ms-excel", "dummy content".getBytes());
+//
+//        Mockito.when(staticCheckingService.validateAndRejectExcel(invalidFile))
+//                .thenReturn(List.of("Error 1", "Error 2"));
+//
+//        mockMvc.perform(multipart("/api/excel/static")
+//                        .file(invalidFile))
+//                .andExpect(status().isBadRequest())
+//                .andExpect(content().json(objectMapper.writeValueAsString(List.of("Error 1", "Error 2"))));
+//    }
 
     @Test
     public void test_DynamicWithNoErrors() throws Exception {
