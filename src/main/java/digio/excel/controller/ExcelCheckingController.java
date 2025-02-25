@@ -65,21 +65,26 @@ public class ExcelCheckingController {
     public ResponseEntity<?> handleUploadWithTemplate(
             @RequestParam("file") MultipartFile file,
             @RequestParam("condition") List<String> expectedHeaders,
-            @RequestParam("calculator") List<String> calculator,
-            @RequestParam("relation") List<String> ruleset) {
+            @RequestParam("calculater") List<String> calculater,
+            @RequestParam("relation") List<String> relation,
+            @RequestParam("compare") List<String> compare) {
         ResponseEntity<?> fileValidation = validateFile(file);
         if (fileValidation != null) return fileValidation;
 
-        if (expectedHeaders == null || expectedHeaders.isEmpty()) {
-            return ResponseEntity.badRequest().body(Collections.singletonMap("message", "โปรดระบุหัวข้อที่ต้องการตรวจสอบในเทมเพลต"));
-        }
+        System.out.println(expectedHeaders);
+        System.out.println(calculater);
+        System.out.println(relation);
+        System.out.println(compare);
 
         try {
-            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculator, ruleset);
+            List<Map<String, Object>> validationErrors = templateService.handleUploadWithTemplate(file, expectedHeaders, calculater, relation, compare);
 
-            return validationErrors.isEmpty() ?
-                    ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ Excel ถูกต้อง ไม่มีข้อผิดพลาด")) :
-                    ResponseEntity.badRequest().body(Collections.singletonMap("errors", validationErrors));
+            System.out.println(validationErrors);
+            if (validationErrors.isEmpty() || !validationErrors.get(0).containsKey("summary")) {
+                return ResponseEntity.ok(Collections.singletonMap("message", "ไฟล์ Excel ถูกต้อง ไม่มีข้อผิดพลาด"));
+            } else {
+                return ResponseEntity.badRequest().body(Collections.singletonMap("errors", validationErrors));
+            }
         } catch (Exception e) {
             return handleException(e);
         }

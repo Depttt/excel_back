@@ -7,6 +7,7 @@ import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,8 +37,14 @@ public class DynamicCheckingServiceTest {
         });
 
         List<Map<String, Object>> errors = dynamicCheckingService.validateExcel(invalidFile);
-        assertEquals(1, errors.size(), "ควรมีข้อผิดพลาดในแถวที่ 2");
-        assertEquals("แถวที่ 2: ชื่อไม่ควรมีตัวเลข, อีเมลไม่ถูกต้อง, บัตรประชาชนไม่ถูกต้อง, หมายเลขโทรศัพท์ไม่ถูกต้อง, ที่อยู่ไม่ถูกต้อง", errors.get(0));
+        assertEquals(6, errors.size(), "ควรมีข้อผิดพลาดในแถวที่ 2");
+        Map<String, Object> expectedError = new HashMap<>();
+        expectedError.put("column", 0);
+        expectedError.put("header", "ชื่อ");
+        expectedError.put("row", 1);
+        expectedError.put("message", "ชื่อไม่ควรมีตัวเลข");
+
+        assertEquals(expectedError, errors.getFirst());
     }
 
     @Test
@@ -67,7 +74,7 @@ public class DynamicCheckingServiceTest {
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
                 dynamicCheckingService.validateExcel(emptyFile));
-        assertEquals("ไม่สามารถอ่านไฟล์ Excel ได้", exception.getMessage());
+        assertEquals("ไฟล์ว่างเปล่า ไม่สามารถอ่านข้อมูลได้", exception.getMessage());
     }
 
     private MockMultipartFile createExcelFile(String[][] data) throws Exception {

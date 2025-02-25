@@ -1,22 +1,25 @@
 package digio.excel.controller;
 
+import digio.excel.DTO.TemplateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.storage.Blob;
 import com.google.cloud.storage.Bucket;
 import com.google.firebase.cloud.StorageClient;
-import digio.excel.DTO.TemplateRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.nodes.Tag;
 import org.yaml.snakeyaml.representer.Representer;
 
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+
 
 @RestController
 @RequestMapping("/api/save/templates")
@@ -30,56 +33,57 @@ public class TemplateController {
     }
 
     @GetMapping("/load")
-    public ResponseEntity<Object> loadAllTemplate(){
+    public ResponseEntity<Object> loadAllTemplates() {
         Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
-        if (yamlData.isEmpty()){
+        if (yamlData.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "❌ No templates found"));
+                    .body(Map.of("error", "No templates found"));
         }
+
         return ResponseEntity.ok(yamlData);
     }
 
-    @GetMapping("/{usertoken}")
-    public  ResponseEntity<Object> getTemplateByUserToken(@PathVariable String userToken){
-        try{
-            Map<String, Map<String, List<Map<String,Object>>>> yamlData = readYamlFromStorage();
+    @GetMapping("/{userToken}")
+    public ResponseEntity<Object> getTemplatesByUserToken(@PathVariable String userToken) {
+        try {
+            Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
-            if (yamlData == null || yamlData.isEmpty()){
+            if (yamlData == null || yamlData.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "❌ No templates available in storage"));
+                        .body(Map.of("error", "No templates available in storage"));
             }
 
-            Map<String, List<Map<String,Object>>> userTemplate = yamlData.get(userToken);
+            Map<String, List<Map<String, Object>>> userTemplates = yamlData.get(userToken);
 
-            if (userTemplate == null || userTemplate.isEmpty()){
+            if (userTemplates == null || userTemplates.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "❌ No templates found for user" + userToken));
+                        .body(Map.of("error", "No templates found for user " + userToken));
             }
 
-            return ResponseEntity.ok(userTemplate);
+            return ResponseEntity.ok(userTemplates);
 
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "⚠️ Failed to load templates: " + e.getMessage()));
+                    .body(Map.of("error", "⚠Failed to load templates: " + e.getMessage()));
         }
     }
 
     @PostMapping("/update-token")
-    public ResponseEntity<Object> UpdateUserToken(@RequestBody Map<String, Object> requestBody){
+    public ResponseEntity<Object> updateUserToken(@RequestBody Map<String, Object> requestBody) {
         String userToken = (String) requestBody.get("userToken");
         List<Map<String, Object>> templates = (List<Map<String, Object>>) requestBody.get("templates");
 
-        if (userToken == null || userToken.isEmpty()){
+        if (userToken == null || templates == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("error", "❌ Invalid request data"));
+                    .body(Map.of("error", "Invalid request data"));
         }
 
         Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
-        if (yamlData.containsKey(userToken)){
+        if (yamlData.containsKey(userToken)) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "❌ user token is already exists"));
+                    .body(Map.of("error", "User token already exists"));
         }
 
         yamlData.put(userToken, new HashMap<>());
@@ -87,41 +91,41 @@ public class TemplateController {
 
         saveYamlToStorage(yamlData);
 
-        System.out.println("✅ New user token added: " + userToken);
-        System.out.println("✅ User token updated successfully");
+        System.out.println("New user token added: " + userToken);
+        System.out.println("User token updated successfully");
         return ResponseEntity.ok(Map.of("message", "User token added successfully"));
     }
 
-    @DeleteMapping("/{usertoken}/{templateName}")
-    public ResponseEntity<Object> deleteTemplate(@PathVariable String userToken, @PathVariable String templateName){
+    @DeleteMapping("/{userToken}/{templateName}")
+    public ResponseEntity<Object> deleteTemplate(@PathVariable String userToken, @PathVariable String templateName) {
         Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
-        if (!yamlData.containsKey(userToken) || yamlData.get(userToken).get("templates") == null){
+        if (!yamlData.containsKey(userToken) || yamlData.get(userToken).get("templates") == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "❌ No templates found for user " + userToken));
+                    .body(Map.of("error", "No templates found for user " + userToken));
         }
 
         List<Map<String, Object>> templates = yamlData.get(userToken).get("templates");
         boolean removed = templates.removeIf(t -> templateName.equals(t.get("templatename")));
 
-        if (!removed){
+        if (!removed) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "❌ Template not found"));
+                    .body(Map.of("error", "Template not found"));
         }
 
         saveYamlToStorage(yamlData);
-        System.out.println("✅ Template deleted successfully");
-        return ResponseEntity.ok(Map.of("message", "✅ Template deleted successfully"));
+        System.out.println("Template deleted successfully");
+        return ResponseEntity.ok(Map.of("message", "Template deleted successfully"));
     }
 
-    @PutMapping("/{usertoken}/{templateName}")
-    public ResponseEntity<Object> updateTemplate (@PathVariable String userToken, @PathVariable String templateName,
-                                                  @RequestBody TemplateRequest templateRequest){
+    @PutMapping("/{userToken}/{templateName}")
+    public ResponseEntity<Object> updateTemplate(@PathVariable String userToken, @PathVariable String templateName,
+                                                 @RequestBody TemplateRequest templateRequest) {
         Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
-        if (!yamlData.containsKey(userToken) || yamlData.get(userToken).get("templates") == null ){
+        if (!yamlData.containsKey(userToken) || yamlData.get(userToken).get("templates") == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "❌ No templates found for user " + userToken));
+                    .body(Map.of("error", "No templates found for user " + userToken));
         }
 
         List<Map<String, Object>> templates = yamlData.get(userToken).get("templates");
@@ -129,55 +133,55 @@ public class TemplateController {
         Map<String, Object> updatedTemplate = objectMapper.convertValue(templateRequest, Map.class);
 
         boolean updated = false;
-        for (int i = 0; i < templates.size(); i++){
-            if (templateName.equals(templates.get(i).get("templatename"))){
+        for (int i = 0; i < templates.size(); i++) {
+            if (templateName.equals(templates.get(i).get("templatename"))) {
                 templates.set(i, updatedTemplate);
                 updated = true;
                 break;
             }
         }
 
-        if (!updated){
+        if (!updated) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("error", "❌ Template not found"));
+                    .body(Map.of("error", "Template not found"));
         }
 
         saveYamlToStorage(yamlData);
-        System.out.println("✅ Template updated successfully");
-        return ResponseEntity.ok("✅ Template updated successfully");
+        System.out.println("Template updated successfully");
+        return ResponseEntity.ok(Map.of("message", "Template updated successfully"));
     }
 
     @PostMapping
-    public ResponseEntity<Object> saveTemplate(@RequestBody TemplateRequest templateRequest){
+    public ResponseEntity<Object> saveTemplate(@RequestBody TemplateRequest templateRequest) {
         Map<String, Map<String, List<Map<String, Object>>>> yamlData = readYamlFromStorage();
 
         String userToken = templateRequest.getUserToken();
         yamlData.putIfAbsent(userToken, new HashMap<>());
-        yamlData.get(userToken).putIfAbsent("templates",new ArrayList<>());
+        yamlData.get(userToken).putIfAbsent("templates", new ArrayList<>());
 
         ObjectMapper objectMapper = new ObjectMapper();
         Map<String, Object> templateMap = objectMapper.convertValue(templateRequest, Map.class);
+        templateMap.remove("userToken");
         List<Map<String, Object>> templates = yamlData.get(userToken).get("templates");
 
         boolean updated = false;
-        for (int i = 0; i< templates.size(); i++){
+        for (int i = 0; i < templates.size(); i++) {
             if (templates.get(i).get("templatename").equals(templateRequest.getTemplatename())) {
                 templates.set(i, templateMap);
                 updated = true;
                 break;
             }
         }
-
-        if (!updated){
+        if (!updated) {
             templates.add(templateMap);
         }
 
         saveYamlToStorage(yamlData);
-        System.out.println("✅ Template saved successfully");
-        return ResponseEntity.ok(Map.of("message", "✅ Template saved successfully"));
+        System.out.println("Template saved successfully");
+        return ResponseEntity.ok(Map.of("message", "Template saved successfully"));
     }
 
-    private Map<String, Map<String, List<Map<String, Object>>>> readYamlFromStorage(){
+    private Map<String, Map<String, List<Map<String, Object>>>> readYamlFromStorage() {
         try {
             Bucket bucket = storageClient.bucket();
             Blob blob = bucket.get(FILE_NAME);
@@ -196,7 +200,7 @@ public class TemplateController {
         }
     }
 
-    private void saveYamlToStorage(Map<String, Map<String, List<Map<String, Object>>>> yamlData){
+    private void saveYamlToStorage(Map<String, Map<String, List<Map<String, Object>>>> yamlData) {
         try {
             DumperOptions options = new DumperOptions();
             options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
@@ -209,9 +213,8 @@ public class TemplateController {
 
             storageClient.bucket().create(FILE_NAME, yamlString.getBytes(StandardCharsets.UTF_8));
             System.out.println("YAML file successfully saved.");
-
         } catch (Exception e) {
-            System.err.println("Errror saving YAML file: " + e.getMessage());
+            System.err.println("Error saving YAML file: " + e.getMessage());
             e.printStackTrace();
         }
     }
