@@ -13,6 +13,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -85,8 +87,6 @@ class TemplateServiceTest {
         String summary = (String) resultSum.get("summary");
 
         assertNull(summary);
-
-        System.out.println(result);
     }
 
     @Test
@@ -106,7 +106,7 @@ class TemplateServiceTest {
 
         assertEquals("Errors found",summary);
 
-        System.out.println(result);
+        System.out.println(resultSum);
     }
 
     @Test
@@ -144,6 +144,7 @@ class TemplateServiceTest {
         Map<String, Object> resultSum = result.getFirst();
         String summary = (String) resultSum.get("summary");
 
+        System.out.println(result);
         assertEquals("Errors found",summary);
     }
 
@@ -180,8 +181,7 @@ class TemplateServiceTest {
         Map<String, Object> resultSum = result.getFirst();
         String summary = (String) resultSum.get("summary");
 
-//        System.out.println(summary);
+//        System.out.println(resultSum);
         assertEquals("Errors found",summary);
     }
-
 }

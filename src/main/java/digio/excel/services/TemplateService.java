@@ -232,6 +232,7 @@ public class TemplateService {
         return headerIndexMap;
     }
 
+    // อันจิ้ม
     private void processRowValidation(Row row, List<String> headers, List<Integer> selectedIndices, List<Map<String, Object>> errorList, StringBuilder errorBuilder, Map<String, Integer> headerIndexMap) {
         for (int colIndex = 0; colIndex < headers.size(); colIndex++) {
             if (selectedIndices != null && !selectedIndices.contains(colIndex)) continue;
@@ -243,6 +244,34 @@ public class TemplateService {
             if (!"success".equals(errorMessage)) {
                 addErrorDetails(row, colIndex, header, errorMessage, errorList);
                 errorBuilder.append(errorMessage).append("; ");
+            }
+        }
+    }
+
+    // โครงดุว่าทำไรบ้าง
+    private void checkForDuplicates(List<Map<String, String>> dataList, List<String> duplicateHeaders, List<Map<String, Object>> errorList) {
+        for (String column : duplicateHeaders) { // ตรวจสอบค่าซ้ำของทุกคอลัมน์ที่กำหนด
+            Map<String, List<Integer>> duplicateMap = new HashMap<>();
+
+            for (int i = 0; i < dataList.size(); i++) {
+                String value = dataList.get(i).get(column);
+                if (value == null || value.isEmpty()) continue;
+
+                duplicateMap.putIfAbsent(value, new ArrayList<>());
+                duplicateMap.get(value).add(i + 1); // บันทึก row index (เริ่มที่ 1)
+            }
+
+            for (Map.Entry<String, List<Integer>> entry : duplicateMap.entrySet()) {
+                if (entry.getValue().size() > 1) { // ถ้ามีมากกว่า 1 แถว แปลว่าซ้ำ
+//                    String errorMessage = column + " มีค่าซ้ำในแถว " + entry.getValue();
+//                    addErrorDetails(entry.getValue(), column, column, errorMessage, errorList);
+                    Map<String, Object> error = new HashMap<>();
+                    error.put("row", entry.getValue());
+                    error.put("column", column);
+                    error.put("header", column);
+                    error.put("message", column + " มีค่าซ้ำในแถว " + entry.getValue());
+                    errorList.add(error);
+                }
             }
         }
     }
@@ -447,6 +476,7 @@ public class TemplateService {
         }
     }
 
+    //
     private String validateCellAndGetMessage(String header, String cellValue) {
         return validationRules.entrySet().stream()
                 .filter(entry -> entry.getKey().matcher(header).matches())
