@@ -202,12 +202,25 @@ public class TemplateService {
         String addend = hasCalculation ? calculation.get(1).trim() : null;
         String operand = hasCalculation ? calculation.get(2).trim() : null;
         String resultKey = hasCalculation ? calculation.get(3).trim() : null;
+        List<Map<String, Object>> rowDataList = new ArrayList<>();
 
         for (int i = 1; i <= sheet.getLastRowNum(); i++) {
             Row row = sheet.getRow(i);
             Map<String, Object> rowData = new HashMap<>();
             StringBuilder errorBuilder = new StringBuilder();
 
+            rowData.put("row",i+1);
+            for (int colIndex = 0; colIndex < headers.size(); colIndex++) {
+                String header = headers.get(colIndex);
+                rowData.put("colIndex",colIndex);
+                if (header.equals("name") || header.equals("email") || header.equals("citizenid") || header.equals("phone")){
+                String cellValue = Optional.ofNullable(getCellValue(row.getCell(colIndex))).map(String::trim).orElse(""); // ดึงค่า cell
+                rowData.put(header, cellValue);
+                    }
+            }
+            rowDataList.add(rowData);
+
+            checkForDuplicate(rowDataList, headers, errorList, errorBuilder);
             processRowValidation(row, headers, selectedIndices, errorList, errorBuilder, headerIndexMap);
             if (relation != null && !relation.isEmpty()) checkRelation(row, relation, errorList, errorBuilder, headerIndexMap);
             if (hasCalculation) processCalculation(row, operator, addend, operand, resultKey, rowData, errorList, errorBuilder, headerIndexMap);
@@ -224,6 +237,58 @@ public class TemplateService {
         return resultList.isEmpty() ? Collections.emptyList() : resultList;
     }
 
+    private void checkForDuplicate(List<Map<String, Object>> rowData,List<String> headers, List<Map<String, Object>> errorList, StringBuilder errorBuilder){
+        Set<String> nameSet = new HashSet<>();
+        Set<String> emailSet = new HashSet<>();
+        Set<String> citizenIdSet = new HashSet<>();
+        Set<String> phoneSet = new HashSet<>();
+
+        for (Map<String, Object> checkedData : rowData) {
+            String name = (String) checkedData.get("name");
+            if (name != null && !name.isEmpty()) {
+                if (!nameSet.add(name)) {
+                    String row = String.valueOf(checkedData.get("row"));
+                    addError(row, headers.indexOf("name"),"name", "ตรวจพบข้อมูลซ้ำ " + name, errorList, null);
+
+                }
+            }
+
+            String email = (String) checkedData.get("email");
+            if (email != null && !email.isEmpty()) {
+                if (!emailSet.add(email)) {
+                    String row = String.valueOf(checkedData.get("row"));
+                    addError(row, headers.indexOf("email"),"email", "ตรวจพบข้อมูลซ้ำ " + email, errorList, null);
+                }
+            }
+
+            String citizenId = (String) checkedData.get("citizenId");
+            if (citizenId != null && !citizenId.isEmpty()) {
+                if (!citizenIdSet.add(citizenId)) {
+                    String row = String.valueOf(checkedData.get("row"));
+                    addError(row, headers.indexOf("citizenId"),"citizenId", "ตรวจพบข้อมูลซ้ำ " + citizenId, errorList, null);
+                }
+            }
+
+            String phone = (String) checkedData.get("phone");
+            if (phone != null && !phone.isEmpty()) {
+                if (!phoneSet.add(phone)) {
+                    String row = String.valueOf(checkedData.get("row"));
+                    addError(row, headers.indexOf("phone"),"phone", "ตรวจพบข้อมูลซ้ำ " + phone, errorList, null);
+                }
+            }
+        }
+    }
+
+    private void addError(String row, int colIndex, String header, String errorMessage, List<Map<String, Object>> errorList, StringBuilder errorBuilder) {
+        Map<String, Object> errorDetails = new HashMap<>();
+        errorDetails.put("row", row);
+        errorDetails.put("column", colIndex);
+        errorDetails.put("header", header);
+        errorDetails.put("message", errorMessage);
+        errorList.add(errorDetails);
+        errorBuilder.append(errorMessage).append("; ");
+    }
+
     private Map<String, Integer> getHeaderIndexMap(Row headerRow) {
         Map<String, Integer> headerIndexMap = new HashMap<>();
         for (Cell cell : headerRow) {
@@ -234,6 +299,8 @@ public class TemplateService {
 
     // อันจิ้ม
     private void processRowValidation(Row row, List<String> headers, List<Integer> selectedIndices, List<Map<String, Object>> errorList, StringBuilder errorBuilder, Map<String, Integer> headerIndexMap) {
+        Map<String, List<String>> columnDataMap = new HashMap<>();
+
         for (int colIndex = 0; colIndex < headers.size(); colIndex++) {
             if (selectedIndices != null && !selectedIndices.contains(colIndex)) continue;
 
@@ -241,39 +308,22 @@ public class TemplateService {
             String cellValue = Optional.ofNullable(getCellValue(row.getCell(colIndex))).map(String::trim).orElse("");
             String errorMessage = validateCellAndGetMessage(header, cellValue);
 
+//            if (header.equals("name") || header.equals("email") || header.equals("citizenid") || header.equals("phone")){
+//                if (!cellValue.isEmpty()) {
+//                    List<Map<String, String>> dataList = new ArrayList<>();
+//                    Map<String, String> dataMap = new HashMap<>();
+//                    dataMap.put(header, cellValue);
+//                    dataList.add(dataMap);
+//                    columnDataMap.computeIfAbsent(header, k -> new ArrayList<>()).add(cellValue);
+//                }
+//            }
+
             if (!"success".equals(errorMessage)) {
                 addErrorDetails(row, colIndex, header, errorMessage, errorList);
                 errorBuilder.append(errorMessage).append("; ");
             }
         }
-    }
-
-    // โครงดุว่าทำไรบ้าง
-    private void checkForDuplicates(List<Map<String, String>> dataList, List<String> duplicateHeaders, List<Map<String, Object>> errorList) {
-        for (String column : duplicateHeaders) { // ตรวจสอบค่าซ้ำของทุกคอลัมน์ที่กำหนด
-            Map<String, List<Integer>> duplicateMap = new HashMap<>();
-
-            for (int i = 0; i < dataList.size(); i++) {
-                String value = dataList.get(i).get(column);
-                if (value == null || value.isEmpty()) continue;
-
-                duplicateMap.putIfAbsent(value, new ArrayList<>());
-                duplicateMap.get(value).add(i + 1); // บันทึก row index (เริ่มที่ 1)
-            }
-
-            for (Map.Entry<String, List<Integer>> entry : duplicateMap.entrySet()) {
-                if (entry.getValue().size() > 1) { // ถ้ามีมากกว่า 1 แถว แปลว่าซ้ำ
-//                    String errorMessage = column + " มีค่าซ้ำในแถว " + entry.getValue();
-//                    addErrorDetails(entry.getValue(), column, column, errorMessage, errorList);
-                    Map<String, Object> error = new HashMap<>();
-                    error.put("row", entry.getValue());
-                    error.put("column", column);
-                    error.put("header", column);
-                    error.put("message", column + " มีค่าซ้ำในแถว " + entry.getValue());
-                    errorList.add(error);
-                }
-            }
-        }
+//        checkForDuplicates(columnDataMap , errorList);
     }
 
     private void processComparison(Row row, List<String> compare, List<Map<String, Object>> errorList, StringBuilder errorBuilder, Map<String, Integer> headerIndexMap) {
